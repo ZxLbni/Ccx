@@ -6,8 +6,8 @@ import time
 import json
 
 # Telegram bot token
-TOKEN = ""
-OWNER_ID = 7427691214  # Owner's Telegram ID
+TOKEN = "6531798224:AAFMgokXvj8bLTXyxQw2IkE0hyQnJf7oFTk"
+OWNER_ID = 6742022802  # Owner's Telegram ID
 
 # Initialize the bot
 bot = telebot.TeleBot(TOKEN)
